@@ -686,7 +686,10 @@ static void zmk_ble_ready(int err) {
         return;
     }
 
+    // Skip host advertising on split peripherals — peripheral.c handles its own advertising
+#if !IS_ENABLED(CONFIG_ZMK_SPLIT) || IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
     update_advertising();
+#endif
 }
 
 static int zmk_ble_complete_startup(void) {
