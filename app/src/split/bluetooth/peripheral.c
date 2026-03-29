@@ -78,11 +78,23 @@ static bool enabled = false;
 static void advertising_cb(struct k_work *work) {
     const int err = start_advertising(low_duty_advertising);
     if (err < 0) {
-        LOG_ERR("Failed to start advertising (%d)", err);
+        LOG_ERR("Failed to start advertising (%d), retrying in 1s", err);
+        k_work_schedule(&advertising_retry_work, K_SECONDS(1));
     }
 }
 
 K_WORK_DEFINE(advertising_work, advertising_cb);
+
+static void advertising_retry_cb(struct k_work *work) {
+    if (!is_connected) {
+        LOG_WRN("Retrying split peripheral advertising");
+        // Stop any existing advertising first
+        bt_le_adv_stop();
+        k_work_submit(&advertising_work);
+    }
+}
+
+K_WORK_DELAYABLE_DEFINE(advertising_retry_work, advertising_retry_cb);
 
 static void connected(struct bt_conn *conn, uint8_t err) {
     is_connected = (err == 0);
@@ -247,6 +259,13 @@ static int zmk_peripheral_ble_complete_startup(void) {
 
     settings_loaded = true;
     k_work_submit(&notify_status_work);
+
+    // Ensure advertising starts regardless of transport layer state
+    if (!is_connected && !enabled) {
+        LOG_WRN("Force-starting split peripheral advertising after settings load");
+        enabled = true;
+        k_work_schedule(&advertising_retry_work, K_MSEC(500));
+    }
 #endif
 
     return 0;
@@ -269,7 +288,7 @@ static struct settings_handler ble_peripheral_settings_handler = {
 static int zmk_peripheral_ble_init(void) {
     int err = bt_enable(NULL);
 
-    if (err) {
+    if (err < 0 && err != -EALREADY) {
         LOG_ERR("BLUETOOTH FAILED (%d)", err);
         return err;
     }

@@ -175,6 +175,10 @@ bool zmk_ble_profile_is_connected(uint8_t index) {
     advertising_status = ZMK_ADV_CONN;
 
 int update_advertising(void) {
+    // Split peripherals handle their own advertising via peripheral.c
+#if IS_ENABLED(CONFIG_ZMK_SPLIT) && !IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+    return 0;
+#endif
     int err = 0;
     bt_addr_le_t *addr;
     struct bt_conn *conn;
